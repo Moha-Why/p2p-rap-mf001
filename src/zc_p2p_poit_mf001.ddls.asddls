@@ -2,7 +2,6 @@
 @EndUserText.label: 'P2P purchase order items'
 @Metadata.allowExtensions: true
 define view entity ZC_P2P_POIT_MF001
-  provider contract transactional_query
   as projection on ZI_P2P_POIT_MF001
 {
   key PurchaseOrderItemUUID,
