@@ -8,8 +8,8 @@ ENDCLASS.
 
 CLASS zcl_p2p_seed_mf001 IMPLEMENTATION.
   METHOD if_oo_adt_classrun~main.
-    " Bootstrap fixture only. Run sequentially before developing RAP behavior.
-    " Interactive business writes must later use RAP, not this console class.
+    "Bootstrap fixture only; run one instance at a time on your own trial data.
+    "Interactive business writes use RAP. This class never repairs or overwrites rows.
     DATA(lv_owner) = cl_abap_context_info=>get_user_technical_name( ).
     DATA(lv_date) = cl_abap_context_info=>get_system_date( ).
     DATA lv_due_date TYPE d.
@@ -25,8 +25,44 @@ CLASS zcl_p2p_seed_mf001 IMPLEMENTATION.
             AND po_number = 'DEMO-PO-001'
           INTO @DATA(lv_existing).
         IF sy-subrc = 0.
-          out->write( 'Demo purchase order already exists for your user; kept unchanged.' ).
-          out->write( 'Milestone 2: no duplicate documents created.' ).
+          "An existing header alone does not prove that the fixture is complete.
+          SELECT COUNT( * ) FROM zp2p_po_mf001
+            WHERE created_by = @lv_owner AND po_number = 'DEMO-PO-001'
+            INTO @DATA(lv_existing_orders).
+          SELECT COUNT( * )
+            FROM zp2p_po_mf001 AS po
+            INNER JOIN zp2p_poit_mf001 AS pi ON pi~po_uuid = po~po_uuid
+            INNER JOIN zp2p_supp_mf001 AS su
+              ON su~owner_id = po~created_by AND su~supplier_id = po~supplier_id
+            INNER JOIN zp2p_prod_mf001 AS pr
+              ON pr~owner_id = pi~created_by AND pr~product_id = pi~product_id
+            INNER JOIN zp2p_gr_mf001 AS gr ON gr~po_uuid = po~po_uuid
+            INNER JOIN zp2p_grit_mf001 AS gi
+              ON gi~receipt_uuid = gr~receipt_uuid AND gi~po_uuid = po~po_uuid
+              AND gi~po_item_uuid = pi~item_uuid
+            INNER JOIN zp2p_inv_mf001 AS ih ON ih~po_uuid = po~po_uuid
+            INNER JOIN zp2p_invit_mf001 AS ii
+              ON ii~invoice_uuid = ih~invoice_uuid AND ii~po_uuid = po~po_uuid
+              AND ii~po_item_uuid = pi~item_uuid
+            WHERE po~po_uuid = @lv_existing AND po~created_by = @lv_owner
+              AND pi~created_by = @lv_owner AND gr~created_by = @lv_owner
+              AND gi~created_by = @lv_owner AND ih~created_by = @lv_owner
+              AND ii~created_by = @lv_owner
+              AND gr~receipt_number = 'DEMO-GR-001'
+              AND ih~invoice_number = 'DEMO-INV-001'
+              AND pr~unit_code = 'EA'
+              AND pi~unit_code = 'EA' AND gi~unit_code = 'EA' AND ii~unit_code = 'EA'
+              AND po~currency_code = 'EGP' AND pi~currency_code = 'EGP'
+              AND ih~currency_code = 'EGP' AND ii~currency_code = 'EGP'
+              AND ih~supplier_id = po~supplier_id
+            INTO @DATA(lv_existing_links).
+          IF lv_existing_orders = 1 AND lv_existing_links = 1.
+            out->write( 'Your existing demo document chain is linked; kept unchanged.' ).
+            out->write( 'No duplicate documents created.' ).
+          ELSE.
+            out->write( 'Existing demo data is incomplete, duplicated, or inconsistent.' ).
+            out->write( 'Nothing changed. Inspect the existing demo records before continuing.' ).
+          ENDIF.
           RETURN.
         ENDIF.
 
@@ -62,6 +98,21 @@ CLASS zcl_p2p_seed_mf001 IMPLEMENTATION.
             created_by = lv_owner created_at = lv_now
             local_last_changed_by = lv_owner local_last_changed_at = lv_now
             last_changed_at = lv_now ) ).
+
+        "Do not silently reuse an existing product whose unit conflicts with EA.
+        IF lt_products IS NOT INITIAL.
+          SELECT FROM zp2p_prod_mf001 FIELDS product_id, unit_code
+            FOR ALL ENTRIES IN @lt_products
+            WHERE owner_id = @lv_owner AND product_id = @lt_products-product_id
+            INTO TABLE @DATA(lt_existing_products).
+        ENDIF.
+        LOOP AT lt_existing_products INTO DATA(ls_existing_product).
+          IF ls_existing_product-unit_code <> 'EA'.
+            out->write( |Product { ls_existing_product-product_id } already exists with a different unit.| ).
+            out->write( 'Nothing changed. Resolve the reference-data conflict first.' ).
+            RETURN.
+          ENDIF.
+        ENDLOOP.
 
         DATA(ls_po) = VALUE zp2p_po_mf001(
           client = sy-mandt

@@ -41,10 +41,9 @@ annotate entity ZC_P2P_POIT_MF001 with
   @UI.identification: [{ position: 60 }]
   UnitPrice;
 
-  @UI.hidden: true
+  @EndUserText.label: 'Currency'
+  @UI.identification: [{ position: 70 }]
   CurrencyCode;
-  @UI.hidden: true
-  NetAmount;
   @UI.hidden: true
   CreatedBy;
   @UI.hidden: true

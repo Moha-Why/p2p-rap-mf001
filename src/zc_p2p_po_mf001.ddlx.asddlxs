@@ -41,8 +41,6 @@ annotate entity ZC_P2P_PO_MF001 with
   Status;
 
   @UI.hidden: true
-  TotalAmount;
-  @UI.hidden: true
   CreatedBy;
   @UI.hidden: true
   CreatedAt;

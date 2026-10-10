@@ -2,7 +2,6 @@
 @EndUserText.label: 'P2P purchase orders'
 @Metadata.allowExtensions: true
 @Search.searchable: true
-@ObjectModel.semanticKey: ['PurchaseOrderNumber']
 define root view entity ZC_P2P_PO_MF001
   provider contract transactional_query
   as projection on ZI_P2P_PO_MF001
@@ -16,8 +15,6 @@ define root view entity ZC_P2P_PO_MF001
       OrderDate,
       CurrencyCode,
       Status,
-      @Semantics.amount.currencyCode: 'CurrencyCode'
-      TotalAmount,
       CreatedBy,
       CreatedAt,
       LocalLastChangedBy,

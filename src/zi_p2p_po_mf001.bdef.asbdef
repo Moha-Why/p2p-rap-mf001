@@ -22,12 +22,17 @@ etag master LocalLastChangedAt
   association _Items { create ( features : instance, authorization : update ); with draft; }
 
   determination setDefaults on modify { create; }
+  validation validateHeader on save { create; update; }
 
   draft action ( features : instance ) Edit;
   draft action Activate optimized;
   draft action Discard;
   draft action Resume;
-  draft determine action Prepare;
+  draft determine action Prepare
+  {
+    validation ( always ) validateHeader;
+    validation ( always ) PurchaseOrderItem~validateItem;
+  }
 
   mapping for zp2p_po_mf001
   {
@@ -57,13 +62,14 @@ etag master LocalLastChangedAt
   delete ( features : instance );
 
   field ( readonly, numbering : managed ) PurchaseOrderItemUUID;
-  field ( readonly ) PurchaseOrderUUID, UnitCode, CurrencyCode, NetAmount,
+  field ( readonly ) PurchaseOrderUUID, NetAmount,
                      CreatedBy, CreatedAt, LocalLastChangedBy,
                      LocalLastChangedAt, LastChangedAt;
-  field ( mandatory ) ItemNumber, ProductID, Quantity, UnitPrice;
+  field ( mandatory ) ItemNumber, ProductID, Quantity, UnitPrice, UnitCode, CurrencyCode;
 
   association _PurchaseOrder { with draft; }
   determination setDefaults on modify { create; }
+  validation validateItem on save { create; update; }
 
   mapping for zp2p_poit_mf001
   {

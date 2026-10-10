@@ -15,3 +15,4 @@ define view entity ZI_P2P_PROD_MF001
       product_name as ProductName,
       unit_code as UnitCode
 }
+where unit_code = 'EA'

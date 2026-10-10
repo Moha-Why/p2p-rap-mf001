@@ -1,13 +1,7 @@
-class ZBP_I_P2P_PO_MF001 definition
-  public
-  create private .
-
-public section.
-protected section.
-private section.
+CLASS zbp_i_p2p_po_mf001 DEFINITION
+  PUBLIC ABSTRACT FINAL
+  FOR BEHAVIOR OF zi_p2p_po_mf001.
 ENDCLASS.
 
-
-
-CLASS ZBP_I_P2P_PO_MF001 IMPLEMENTATION.
+CLASS zbp_i_p2p_po_mf001 IMPLEMENTATION.
 ENDCLASS.
