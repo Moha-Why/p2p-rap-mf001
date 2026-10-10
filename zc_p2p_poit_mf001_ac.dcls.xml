@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<abapGit xmlns:asx="http://www.sap.com/abapxml" version="v1.0.0" serializer="LCL_OBJECT_DCLS" serializer_version="v1.0.0">
+ <asx:abap version="1.0">
+  <asx:values>
+   <DCLS>
+    <DCLNAME>ZC_P2P_POIT_MF001_AC</DCLNAME>
+    <DCL_TYPE>ROLE</DCL_TYPE>
+    <MASTERLANG>E</MASTERLANG>
+    <LANGUAGE>E</LANGUAGE>
+    <SHORT_TEXT>P2P purchase order items access</SHORT_TEXT>
+    <ABAP_LANGUAGE_VERSION>5</ABAP_LANGUAGE_VERSION>
+   </DCLS>
+  </asx:values>
+ </asx:abap>
+</abapGit>

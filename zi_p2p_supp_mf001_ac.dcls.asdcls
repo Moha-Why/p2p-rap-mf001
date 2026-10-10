@@ -1,0 +1,6 @@
+@EndUserText.label: 'P2P supplier owner access'
+@MappingRole: true
+define role ZI_P2P_SUPP_MF001_AC {
+  grant select on ZI_P2P_SUPP_MF001
+    where OwnerID = $session.user;
+}

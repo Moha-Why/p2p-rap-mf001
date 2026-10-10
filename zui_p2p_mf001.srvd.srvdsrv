@@ -1,0 +1,7 @@
+@EndUserText.label: 'P2P purchase order UI'
+define service ZUI_P2P_MF001 {
+  expose ZC_P2P_PO_MF001 as PurchaseOrders;
+  expose ZC_P2P_POIT_MF001 as PurchaseOrderItems;
+  expose ZI_P2P_SUPP_MF001 as Suppliers;
+  expose ZI_P2P_PROD_MF001 as Products;
+}

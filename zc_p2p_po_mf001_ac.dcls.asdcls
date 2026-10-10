@@ -1,0 +1,6 @@
+@EndUserText.label: 'P2P purchase order projection access'
+@MappingRole: true
+define role ZC_P2P_PO_MF001_AC {
+  grant select on ZC_P2P_PO_MF001
+    where inheriting conditions from entity ZI_P2P_PO_MF001;
+}

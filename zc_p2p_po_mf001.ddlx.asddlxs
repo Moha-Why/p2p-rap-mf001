@@ -1,0 +1,53 @@
+@Metadata.layer: #CORE
+@UI.headerInfo: {
+  typeName: 'Purchase order', typeNamePlural: 'Purchase orders',
+  title: { type: #STANDARD, value: 'PurchaseOrderNumber' }
+}
+annotate entity ZC_P2P_PO_MF001 with
+{
+  @UI.facet: [
+    { id: 'Order', type: #IDENTIFICATION_REFERENCE, label: 'Order',
+      targetQualifier: 'General', position: 10 },
+    { id: 'Items', type: #LINEITEM_REFERENCE, label: 'Items',
+      targetElement: '_Items', position: 20 }
+  ]
+  @UI.hidden: true
+  PurchaseOrderUUID;
+
+  @EndUserText.label: 'Order reference'
+  @UI.lineItem: [{ position: 10, importance: #HIGH }]
+  @UI.identification: [{ qualifier: 'General', position: 10 }]
+  PurchaseOrderNumber;
+
+  @EndUserText.label: 'Supplier'
+  @UI.lineItem: [{ position: 20, importance: #HIGH }]
+  @UI.identification: [{ qualifier: 'General', position: 20 }]
+  @UI.selectionField: [{ position: 10 }]
+  SupplierID;
+
+  @EndUserText.label: 'Order date'
+  @UI.lineItem: [{ position: 30 }]
+  @UI.identification: [{ qualifier: 'General', position: 30 }]
+  @UI.selectionField: [{ position: 20 }]
+  OrderDate;
+
+  @EndUserText.label: 'Currency'
+  @UI.identification: [{ qualifier: 'General', position: 40 }]
+  CurrencyCode;
+
+  @EndUserText.label: 'Status'
+  @UI.lineItem: [{ position: 40 }]
+  @UI.identification: [{ qualifier: 'General', position: 50 }]
+  Status;
+
+  @UI.hidden: true
+  CreatedBy;
+  @UI.hidden: true
+  CreatedAt;
+  @UI.hidden: true
+  LocalLastChangedBy;
+  @UI.hidden: true
+  LocalLastChangedAt;
+  @UI.hidden: true
+  LastChangedAt;
+}
