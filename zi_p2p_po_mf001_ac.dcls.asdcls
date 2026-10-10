@@ -1,6 +1,0 @@
-@EndUserText.label: 'P2P purchase order owner access'
-@MappingRole: true
-define role ZI_P2P_PO_MF001_AC {
-  grant select on ZI_P2P_PO_MF001
-    where CreatedBy = $session.user;
-}

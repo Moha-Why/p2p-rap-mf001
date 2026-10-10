@@ -1,1 +1,0 @@
-Serialization metadata templates were adapted from SAP-samples/abap-platform-rap100 (https://github.com/SAP-samples/abap-platform-rap100). The reference sample is licensed under Apache-2.0; its license is included here. This notice covers the referenced templates and does not assign a license to the user's application code.
