@@ -149,3 +149,4 @@ CLASS ltc_p2p_rules IMPLEMENTATION.
     cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>duplicate_items( items ) ).
   ENDMETHOD.
 ENDCLASS.
+

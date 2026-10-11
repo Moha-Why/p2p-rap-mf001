@@ -95,8 +95,12 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
       ENTITY PurchaseOrder
         FIELDS ( CreatedBy Status ) WITH CORRESPONDING #( keys )
       RESULT DATA(orders)
-      FAILED failed
-      REPORTED reported.
+      FAILED DATA(read_failed)
+      REPORTED DATA(read_reported).
+    MOVE-CORRESPONDING read_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
 
     DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
     LOOP AT orders INTO DATA(order).
@@ -122,8 +126,12 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
       ENTITY PurchaseOrder
         FIELDS ( Status ) WITH CORRESPONDING #( keys )
       RESULT DATA(orders)
-      FAILED failed
-      REPORTED reported.
+      FAILED DATA(read_failed)
+      REPORTED DATA(read_reported).
+    MOVE-CORRESPONDING read_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
 
     result = VALUE #( FOR order IN orders
       LET editable = COND #( WHEN order-Status = lcl_p2p_rules=>pending
@@ -141,7 +149,10 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
       ENTITY PurchaseOrder
         FIELDS ( Status CurrencyCode OrderDate ) WITH CORRESPONDING #( keys )
       RESULT DATA(orders)
-      REPORTED reported.
+      REPORTED DATA(read_reported).
+    "EML and determination responses have different derived types.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
 
     DELETE orders WHERE Status IS NOT INITIAL
                     AND CurrencyCode IS NOT INITIAL
@@ -160,8 +171,8 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
                               THEN cl_abap_context_info=>get_system_date( )
                               ELSE order-OrderDate ) ) )
       REPORTED DATA(modify_reported).
-    APPEND LINES OF modify_reported-PurchaseOrder TO reported-PurchaseOrder.
-    APPEND LINES OF modify_reported-PurchaseOrderItem TO reported-PurchaseOrderItem.
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
   ENDMETHOD.
 
   METHOD validateHeader.
@@ -170,8 +181,12 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
         FIELDS ( PurchaseOrderNumber SupplierID OrderDate CurrencyCode Status )
         WITH CORRESPONDING #( keys )
       RESULT DATA(orders)
-      FAILED failed
-      REPORTED reported.
+      FAILED DATA(read_failed)
+      REPORTED DATA(read_reported).
+    MOVE-CORRESPONDING read_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
     CHECK orders IS NOT INITIAL.
 
     DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
@@ -226,8 +241,12 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       ENTITY PurchaseOrderItem BY \_PurchaseOrder
         FIELDS ( Status ) WITH CORRESPONDING #( keys )
       RESULT DATA(orders) LINK DATA(item_links)
-      FAILED failed
-      REPORTED reported.
+      FAILED DATA(read_failed)
+      REPORTED DATA(read_reported).
+    MOVE-CORRESPONDING read_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
 
     LOOP AT keys INTO DATA(key).
       IF line_exists( failed-PurchaseOrderItem[ %tky = key-%tky ] ).
@@ -253,7 +272,10 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       ENTITY PurchaseOrderItem
         FIELDS ( UnitCode CurrencyCode ) WITH CORRESPONDING #( keys )
       RESULT DATA(items)
-      REPORTED reported.
+      REPORTED DATA(read_reported).
+    "EML and determination responses have different derived types.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
 
     DELETE items WHERE UnitCode IS NOT INITIAL AND CurrencyCode IS NOT INITIAL.
     CHECK items IS NOT INITIAL.
@@ -268,8 +290,8 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
           CurrencyCode = COND #( WHEN item-CurrencyCode IS INITIAL
                                  THEN lcl_p2p_rules=>currency ELSE item-CurrencyCode ) ) )
       REPORTED DATA(modify_reported).
-    APPEND LINES OF modify_reported-PurchaseOrder TO reported-PurchaseOrder.
-    APPEND LINES OF modify_reported-PurchaseOrderItem TO reported-PurchaseOrderItem.
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
   ENDMETHOD.
 
   METHOD validateItem.
@@ -278,8 +300,12 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
         FIELDS ( PurchaseOrderUUID ItemNumber ProductID Quantity UnitPrice UnitCode CurrencyCode )
         WITH CORRESPONDING #( keys )
       RESULT DATA(items)
-      FAILED failed
-      REPORTED reported.
+      FAILED DATA(read_failed)
+      REPORTED DATA(read_reported).
+    MOVE-CORRESPONDING read_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
     CHECK items IS NOT INITIAL.
 
     DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
@@ -293,9 +319,9 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       INTO TABLE @products.
 
     "Read siblings from the transactional buffer, including unsaved changes.
-    DATA parent_keys TYPE TABLE FOR READ IMPORT zi_p2p_po_mf001\PurchaseOrder.
-    parent_keys = VALUE #( FOR item IN items
-      ( %is_draft = item-%is_draft PurchaseOrderUUID = item-PurchaseOrderUUID ) ).
+    DATA parent_keys TYPE TABLE FOR READ IMPORT zi_p2p_po_mf001\_Items.
+    parent_keys = VALUE #( FOR src IN items
+  ( %is_draft = src-%is_draft PurchaseOrderUUID = src-PurchaseOrderUUID ) ).
     SORT parent_keys BY %is_draft PurchaseOrderUUID.
     DELETE ADJACENT DUPLICATES FROM parent_keys COMPARING %is_draft PurchaseOrderUUID.
     READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
@@ -304,10 +330,10 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       RESULT DATA(siblings)
       FAILED DATA(parent_failed)
       REPORTED DATA(parent_reported).
-    APPEND LINES OF parent_failed-PurchaseOrder TO failed-PurchaseOrder.
-    APPEND LINES OF parent_failed-PurchaseOrderItem TO failed-PurchaseOrderItem.
-    APPEND LINES OF parent_reported-PurchaseOrder TO reported-PurchaseOrder.
-    APPEND LINES OF parent_reported-PurchaseOrderItem TO reported-PurchaseOrderItem.
+    MOVE-CORRESPONDING parent_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING parent_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
     DATA(duplicates) = lcl_p2p_rules=>duplicate_items( VALUE #( FOR sibling IN siblings
       ( is_draft = sibling-%is_draft po_uuid = sibling-PurchaseOrderUUID
         item_uuid = sibling-PurchaseOrderItemUUID item_number = sibling-ItemNumber ) ) ).
@@ -349,3 +375,4 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 ENDCLASS.
+
