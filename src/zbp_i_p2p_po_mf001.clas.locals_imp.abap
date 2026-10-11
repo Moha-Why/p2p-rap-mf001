@@ -88,6 +88,14 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
     ENDIF.
   ENDMETHOD.
 
+  METHOD release_blocker.
+    IF status <> pending.
+      result = `Only pending orders can be released.`.
+    ELSEIF has_items = abap_false.
+      result = `Add at least one item before releasing the order.`.
+    ENDIF.
+  ENDMETHOD.
+
   METHOD duplicate_items.
     "Blank numbers are reported as missing by check_item, not as duplicates.
     LOOP AT items INTO DATA(item) WHERE item_number IS NOT INITIAL
@@ -117,6 +125,8 @@ CLASS lhc_purchaseorder DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR PurchaseOrder~calculateAmounts.
     METHODS recalculateAmounts FOR MODIFY
       IMPORTING keys FOR ACTION PurchaseOrder~recalculateAmounts.
+    METHODS releaseOrder FOR MODIFY
+      IMPORTING keys FOR ACTION PurchaseOrder~releaseOrder RESULT result.
 ENDCLASS.
 
 CLASS lhc_purchaseorder IMPLEMENTATION.
@@ -164,14 +174,20 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
     MOVE-CORRESPONDING read_reported TO reported
       EXPANDING NESTED TABLES KEEPING TARGET LINES.
 
+    "Release works on the saved (active) order, not on a draft being edited.
     result = VALUE #( FOR order IN orders
       LET editable = COND #( WHEN order-Status = lcl_p2p_rules=>pending
                              THEN if_abap_behv=>fc-o-enabled
                              ELSE if_abap_behv=>fc-o-disabled )
+          releasable = COND #( WHEN order-Status = lcl_p2p_rules=>pending
+                                AND order-%is_draft = if_abap_behv=>mk-off
+                               THEN if_abap_behv=>fc-o-enabled
+                               ELSE if_abap_behv=>fc-o-disabled )
       IN ( %tky = order-%tky
            %update = editable
            %delete = editable
            %action-Edit = editable
+           %action-releaseOrder = releasable
            %assoc-_Items = editable ) ).
   ENDMETHOD.
 
@@ -344,6 +360,63 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
       EXPANDING NESTED TABLES KEEPING TARGET LINES.
   ENDMETHOD.
 
+  METHOD releaseOrder.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder
+        FIELDS ( Status ) WITH CORRESPONDING #( keys )
+      RESULT DATA(orders)
+      FAILED DATA(read_failed)
+      REPORTED DATA(read_reported).
+    MOVE-CORRESPONDING read_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    CHECK orders IS NOT INITIAL.
+
+    "Saved items were validated on activation, so only their existence is checked.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder BY \_Items
+        FIELDS ( PurchaseOrderUUID ) WITH CORRESPONDING #( orders )
+      RESULT DATA(items).
+
+    DATA releasable LIKE orders.
+    LOOP AT orders INTO DATA(order).
+      DATA(blocker) = lcl_p2p_rules=>release_blocker(
+        status    = order-Status
+        has_items = xsdbool( line_exists( items[ %is_draft = order-%is_draft
+                                                 PurchaseOrderUUID = order-PurchaseOrderUUID ] ) ) ).
+      IF blocker IS INITIAL.
+        APPEND order TO releasable.
+      ELSE.
+        APPEND VALUE #( %tky = order-%tky ) TO failed-PurchaseOrder.
+        APPEND VALUE #( %tky = order-%tky
+                        %msg = new_message_with_text(
+                          severity = if_abap_behv_message=>severity-error text = blocker ) )
+          TO reported-PurchaseOrder.
+      ENDIF.
+    ENDLOOP.
+    CHECK releasable IS NOT INITIAL.
+
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder UPDATE FIELDS ( Status )
+      WITH VALUE #( FOR order_to_release IN releasable
+        ( %tky = order_to_release-%tky Status = lcl_p2p_rules=>released ) )
+      FAILED DATA(modify_failed)
+      REPORTED DATA(modify_reported).
+    MOVE-CORRESPONDING modify_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+
+    "Return the released orders so the UI shows the new status at once.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder
+        ALL FIELDS WITH CORRESPONDING #( releasable )
+      RESULT DATA(released_orders).
+    result = VALUE #( FOR released IN released_orders
+      ( %tky = released-%tky %param = released ) ).
+  ENDMETHOD.
+
   METHOD calculateAmounts.
     "Runs on every save and in Prepare (always), so deleted items and rows saved
     "before amounts were calculated are corrected when the order is activated.
@@ -446,6 +519,8 @@ CLASS lhc_purchaseorderitem DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR PurchaseOrderItem~calculateNetAmount.
     METHODS assignItemNumber FOR DETERMINE ON MODIFY
       IMPORTING keys FOR PurchaseOrderItem~assignItemNumber.
+    METHODS setItemDescription FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR PurchaseOrderItem~setItemDescription.
 ENDCLASS.
 
 CLASS lhc_purchaseorderitem IMPLEMENTATION.
@@ -683,6 +758,52 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       WITH VALUE #( FOR item_number IN item_numbers
         ( %is_draft = item_number-is_draft PurchaseOrderItemUUID = item_number-item_uuid
           ItemNumber = item_number-item_number ) )
+      REPORTED DATA(modify_reported).
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+  ENDMETHOD.
+
+  METHOD setItemDescription.
+    "Choosing a product fills the description with the product name, like the
+    "short text in SAP purchase orders. It can be overwritten afterwards.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrderItem
+        FIELDS ( ProductID ItemDescription ) WITH CORRESPONDING #( keys )
+      RESULT DATA(items)
+      REPORTED DATA(read_reported).
+    "EML and determination responses have different derived types.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    DELETE items WHERE ProductID IS INITIAL.
+    CHECK items IS NOT INITIAL.
+
+    "The CDS view admits only the user's own EA products.
+    SELECT FROM zi_p2p_prod_mf001
+      FIELDS ProductID, ProductName
+      FOR ALL ENTRIES IN @items
+      WHERE ProductID = @items-ProductID
+      INTO TABLE @DATA(products).
+
+    TYPES: BEGIN OF ty_description,
+             is_draft TYPE abp_behv_flag,
+             item_uuid TYPE sysuuid_x16,
+             description TYPE zp2p_poit_mf001-description,
+           END OF ty_description.
+    DATA descriptions TYPE STANDARD TABLE OF ty_description WITH EMPTY KEY.
+    LOOP AT items INTO DATA(item).
+      READ TABLE products INTO DATA(product) WITH KEY ProductID = item-ProductID.
+      IF sy-subrc = 0 AND product-ProductName <> item-ItemDescription.
+        APPEND VALUE #( is_draft = item-%is_draft item_uuid = item-PurchaseOrderItemUUID
+                        description = product-ProductName ) TO descriptions.
+      ENDIF.
+    ENDLOOP.
+    CHECK descriptions IS NOT INITIAL.
+
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrderItem UPDATE FIELDS ( ItemDescription )
+      WITH VALUE #( FOR description IN descriptions
+        ( %is_draft = description-is_draft PurchaseOrderItemUUID = description-item_uuid
+          ItemDescription = description-description ) )
       REPORTED DATA(modify_reported).
     MOVE-CORRESPONDING modify_reported TO reported
       EXPANDING NESTED TABLES KEEPING TARGET LINES.

@@ -15,8 +15,11 @@ annotate entity ZC_P2P_PO_MF001 with
   PurchaseOrderUUID;
 
   @EndUserText.label: 'Order number'
-  @UI.lineItem: [{ position: 10, importance: #HIGH }]
-  @UI.identification: [{ qualifier: 'General', position: 10 }]
+  @UI.lineItem: [{ position: 10, importance: #HIGH },
+                 { type: #FOR_ACTION, dataAction: 'releaseOrder', label: 'Release' }]
+  //Unqualified identification entries become buttons in the object page header.
+  @UI.identification: [{ qualifier: 'General', position: 10 },
+                       { type: #FOR_ACTION, dataAction: 'releaseOrder', label: 'Release' }]
   PurchaseOrderNumber;
 
   @EndUserText.label: 'Supplier'
@@ -24,6 +27,8 @@ annotate entity ZC_P2P_PO_MF001 with
   @UI.identification: [{ qualifier: 'General', position: 20 }]
   @UI.selectionField: [{ position: 10 }]
   SupplierID;
+  @UI.hidden: true
+  SupplierName;
 
   @EndUserText.label: 'Order date'
   @UI.lineItem: [{ position: 30 }]
@@ -36,9 +41,15 @@ annotate entity ZC_P2P_PO_MF001 with
   CurrencyCode;
 
   @EndUserText.label: 'Status'
-  @UI.lineItem: [{ position: 40 }]
-  @UI.identification: [{ qualifier: 'General', position: 50 }]
+  @UI.lineItem: [{ position: 40, criticality: 'StatusCriticality' }]
+  @UI.identification: [{ qualifier: 'General', position: 50, criticality: 'StatusCriticality' }]
+  @UI.selectionField: [{ position: 30 }]
+  @UI.textArrangement: #TEXT_ONLY
   Status;
+  @UI.hidden: true
+  StatusText;
+  @UI.hidden: true
+  StatusCriticality;
 
   @EndUserText.label: 'Order total'
   @UI.lineItem: [{ position: 50, importance: #HIGH }]

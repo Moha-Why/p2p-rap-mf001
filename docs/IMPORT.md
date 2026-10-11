@@ -1,6 +1,54 @@
 # Import the reviewed purchase-order draft application
 
-## Revision 009 (current) — automatic order and item numbers
+## Revision 010 (current) — status texts, names, Release, live totals
+
+New objects: table ZP2P_STAT_MF001 (status texts) and CDS view
+ZI_P2P_POSTAT_MF001 (status text and color). Changed: interface views
+ZI_P2P_PO_MF001 and ZI_P2P_POIT_MF001 (new associations to supplier, product,
+and status), both projections and metadata extensions, both behavior
+definitions, behavior class ZBP_I_P2P_PO_MF001, setup class
+ZCL_P2P_SETUP_MF001, and service definition ZUI_P2P_MF001 (new entity set
+OrderStatuses). No existing table changes.
+
+- Status shows as text with a color: Pending (orange), Released (green). The
+  order list has a Status filter.
+- Supplier and product show their names next to their IDs.
+- Release button: on the order list (select an order) and in the order page
+  header. It works only on saved pending orders with at least one item. A
+  released order can no longer be edited or deleted.
+- While you edit an item, the net amount and the order total refresh as soon
+  as quantity or unit price change (no save needed).
+- Choosing a product fills the item description with the product name. You
+  can still overwrite the description afterwards.
+- ABAP Unit: one test added (22 in total).
+
+Pull, set up, and test:
+
+1. In abapGit, Pull. Activate all inactive objects together (Ctrl+Shift+F3).
+   If an object stays inactive, activate it on its own and record the message.
+2. Run ZCL_P2P_SETUP_MF001 again (F9). It must print "Order status texts saved
+   (2 values)." and "Order number interval 01 already exists."
+3. Run As > ABAP Unit Test on ZBP_I_P2P_PO_MF001. All 22 methods must pass.
+4. Open the preview from service binding ZUI_P2P_MF001_O4 (refresh the browser
+   page if it was already open). The list shows Status as Pending/Released
+   with colors, supplier names, and a Status filter.
+5. Create an order. Add an item and choose a product: the description fills
+   in. Enter quantity and price: Net amount and Order total update without
+   saving. Save.
+6. With the saved order open (not in edit mode), choose Release. Status
+   becomes Released (green); Edit and Delete are no longer available.
+7. Create and save an order without items, then choose Release: it fails with
+   "Add at least one item before releasing the order."
+8. While an order is in edit mode, Release is not available.
+
+Record any failure with the object, line, and exact message.
+
+
+## Revision 009 — automatic order and item numbers
+
+Activated in SAP on 2026-10-11 and confirmed working. abapGit imported number
+range object ZP2P_MF001 inactive; it had to be activated manually before the
+setup class could create the interval.
 
 New objects: domain ZP2P_PONR_MF001 (7-digit counter), number range object
 ZP2P_MF001, and class ZCL_P2P_SETUP_MF001 (one-time interval setup). Changed:

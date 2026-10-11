@@ -25,6 +25,7 @@ CLASS ltc_p2p_rules DEFINITION FINAL FOR TESTING
     METHODS order_total_limit FOR TESTING.
     METHODS po_number_format FOR TESTING.
     METHODS item_number_sequence FOR TESTING.
+    METHODS release_rules FOR TESTING.
 ENDCLASS.
 
 CLASS ltc_p2p_rules IMPLEMENTATION.
@@ -230,5 +231,14 @@ CLASS ltc_p2p_rules IMPLEMENTATION.
       act = lcl_p2p_rules=>next_item_number( '99989' ) ).
     "No room left: no number is proposed, validateItem asks for one.
     cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>next_item_number( '99990' ) ).
+  ENDMETHOD.
+
+  METHOD release_rules.
+    cl_abap_unit_assert=>assert_initial(
+      act = lcl_p2p_rules=>release_blocker( status = lcl_p2p_rules=>pending has_items = abap_true ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `Add at least one item before releasing the order.`
+      act = lcl_p2p_rules=>release_blocker( status = lcl_p2p_rules=>pending has_items = abap_false ) ).
+    cl_abap_unit_assert=>assert_equals( exp = `Only pending orders can be released.`
+      act = lcl_p2p_rules=>release_blocker( status = lcl_p2p_rules=>released has_items = abap_true ) ).
   ENDMETHOD.
 ENDCLASS.

@@ -1,6 +1,7 @@
 projection;
 strict ( 2 );
 use draft;
+use side effects;
 
 define behavior for ZC_P2P_PO_MF001 alias PurchaseOrder
 use etag
@@ -13,6 +14,7 @@ use etag
   use action Discard;
   use action Resume;
   use action Prepare;
+  use action releaseOrder;
   use association _Items { create; with draft; }
 }
 

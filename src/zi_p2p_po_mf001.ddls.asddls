@@ -4,6 +4,11 @@
 define root view entity ZI_P2P_PO_MF001
   as select from zp2p_po_mf001
   composition [0..*] of ZI_P2P_POIT_MF001 as _Items
+  association [0..1] to ZI_P2P_SUPP_MF001 as _Supplier
+    on  $projection.SupplierID = _Supplier.SupplierID
+    and $projection.CreatedBy  = _Supplier.OwnerID
+  association [0..1] to ZI_P2P_POSTAT_MF001 as _StatusInfo
+    on $projection.Status = _StatusInfo.Status
 {
   key po_uuid           as PurchaseOrderUUID,
       po_number         as PurchaseOrderNumber,
@@ -23,5 +28,7 @@ define root view entity ZI_P2P_PO_MF001
       local_last_changed_at as LocalLastChangedAt,
       @Semantics.systemDateTime.lastChangedAt: true
       last_changed_at as LastChangedAt,
-      _Items
+      _Items,
+      _Supplier,
+      _StatusInfo
 }
