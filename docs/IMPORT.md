@@ -1,6 +1,28 @@
 # Import the reviewed purchase-order draft application
 
-## Revision 010 (current) — status texts, names, Release, live totals
+## Revision 011 (current) — no unprivileged selects in the behavior class
+
+The ABAP contract check reported "Violation UNPRIVILEGED SELECT in BDEF
+ZI_P2P_PO_MF001". Revision 007 had moved four reads in ZBP_I_P2P_PO_MF001 from
+the tables to the CDS views ZI_P2P_SUPP_MF001, ZI_P2P_PROD_MF001, and
+ZI_P2P_PO_MF001, relying on their access roles. RAP behavior handlers must not
+rely on CDS access control, so these reads use the tables again with an
+explicit owner filter (and the EA filter for products), as SAP's own samples do.
+Behavior is unchanged. Only the behavior class changes.
+
+1. In abapGit, Pull and activate ZBP_I_P2P_PO_MF001.
+2. Run As > ABAP Unit Test on ZBP_I_P2P_PO_MF001. All 22 methods must pass.
+3. In the app: create an order with an unknown supplier or product (must fail),
+   a valid order (must save), choose a product (description fills in), and
+   release a saved order.
+4. Afterwards, the contract check feed must show no new UNPRIVILEGED SELECT
+   entries for ZI_P2P_PO_MF001. Entries from before the pull may remain.
+
+
+## Revision 010 — status texts, names, Release, live totals
+
+Activated and tested in SAP on 2026-10-11. The Fiori elements app generated in
+Business Application Studio from ZUI_P2P_MF001_O4 shows the orders and Release.
 
 New objects: table ZP2P_STAT_MF001 (status texts) and CDS view
 ZI_P2P_POSTAT_MF001 (status text and color). Changed: interface views
