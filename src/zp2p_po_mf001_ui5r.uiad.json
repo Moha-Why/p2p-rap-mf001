@@ -1,0 +1,35 @@
+{
+  "formatVersion": "2",
+  "header": {
+    "description": "An SAP Fiori application.",
+    "originalLanguage": "en",
+    "abapLanguageVersion": "cloudDevelopment"
+  },
+  "generalInformation": {
+    "appType": "ui5",
+    "catalogId": "SAP_TC_UI5_REPO_UIAD",
+    "targetMappingTitle": "Purchase Orders"
+  },
+  "ui5AppDetails": {
+    "appId": "zp2ppomf001"
+  },
+  "navigation": {
+    "targetMappingId": "ZP2P_PO_MF001_UI5R_TM",
+    "semanticObject": "ZP2PPurchaseOrder",
+    "action": "manage",
+    "desktop": true,
+    "tablet": true,
+    "phone": true
+  },
+  "tiles": [
+    {
+      "id": "ZP2P_PO_MF001_UI5R_AL",
+      "tileType": "static",
+      "isDefault": true,
+      "standard": {
+        "title": "Purchase Orders",
+        "subtitle": "P2P"
+      }
+    }
+  ]
+}

@@ -13,7 +13,7 @@
     <LANGU>E</LANGU>
     <OBJECT>ZP2P_MF001</OBJECT>
     <TXT>P2P purchase order numbers</TXT>
-    <TXTSHORT>P2P PO numbers</TXTSHORT>
+    <TXTSHORT>P2P purchase orde...</TXTSHORT>
    </TEXT>
   </asx:values>
  </asx:abap>
