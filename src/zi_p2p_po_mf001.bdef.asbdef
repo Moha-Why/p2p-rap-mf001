@@ -22,7 +22,10 @@ etag master LocalLastChangedAt
   association _Items { create ( features : instance, authorization : update ); with draft; }
 
   determination setDefaults on modify { create; }
+  determination calculateAmounts on save { create; update; }
   validation validateHeader on save { create; update; }
+
+  internal action recalculateAmounts;
 
   draft action ( features : instance ) Edit;
   draft action Activate optimized;
@@ -30,6 +33,7 @@ etag master LocalLastChangedAt
   draft action Resume;
   draft determine action Prepare
   {
+    determination ( always ) calculateAmounts;
     validation ( always ) validateHeader;
     validation ( always ) PurchaseOrderItem~validateItem;
   }
@@ -69,6 +73,7 @@ etag master LocalLastChangedAt
 
   association _PurchaseOrder { with draft; }
   determination setDefaults on modify { create; }
+  determination calculateNetAmount on modify { create; field Quantity, UnitPrice; }
   validation validateItem on save { create; update; }
 
   mapping for zp2p_poit_mf001

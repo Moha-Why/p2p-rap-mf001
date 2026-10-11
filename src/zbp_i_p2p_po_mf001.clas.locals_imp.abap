@@ -25,6 +25,10 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
       APPEND VALUE #( field_name = 'STATUS'
                       text = 'The order has an invalid status.' ) TO issues.
     ENDIF.
+    IF abs( order_total ) > max_amount.
+      APPEND VALUE #( field_name = 'TOTALAMOUNT'
+                      text = 'The order total exceeds the supported amount size.' ) TO issues.
+    ENDIF.
   ENDMETHOD.
 
   METHOD check_item.
@@ -52,9 +56,20 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
       APPEND VALUE #( field_name = 'CURRENCYCODE'
                       text = 'This application supports EGP currency only.' ) TO issues.
     ENDIF.
-    IF CONV decfloat34( item-quantity ) * CONV decfloat34( item-unit_price ) > CONV decfloat34( '9999999999999.99' ).
+    IF CONV decfloat34( item-quantity ) * CONV decfloat34( item-unit_price ) > max_amount.
       APPEND VALUE #( field_name = 'UNITPRICE'
                       text = 'Quantity times price exceeds the supported amount size.' ) TO issues.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD net_amount.
+    result = fit_amount( round( val = CONV decfloat34( quantity ) * CONV decfloat34( unit_price )
+                                dec = 2 ) ).
+  ENDMETHOD.
+
+  METHOD fit_amount.
+    IF abs( amount ) <= max_amount.
+      result = amount.
     ENDIF.
   ENDMETHOD.
 
@@ -81,6 +96,10 @@ CLASS lhc_purchaseorder DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR PurchaseOrder~setDefaults.
     METHODS validateHeader FOR VALIDATE ON SAVE
       IMPORTING keys FOR PurchaseOrder~validateHeader.
+    METHODS calculateAmounts FOR DETERMINE ON SAVE
+      IMPORTING keys FOR PurchaseOrder~calculateAmounts.
+    METHODS recalculateAmounts FOR MODIFY
+      IMPORTING keys FOR ACTION PurchaseOrder~recalculateAmounts.
 ENDCLASS.
 
 CLASS lhc_purchaseorder IMPLEMENTATION.
@@ -202,6 +221,12 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
         AND PurchaseOrderUUID <> @orders-PurchaseOrderUUID
       INTO TABLE @DATA(clashes).
 
+    "Net amounts are recalculated by calculateAmounts before validations run.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder BY \_Items
+        FIELDS ( PurchaseOrderUUID NetAmount ) WITH CORRESPONDING #( keys )
+      RESULT DATA(items).
+
     DATA number_taken TYPE abap_bool.
     LOOP AT orders INTO DATA(order).
       APPEND VALUE #( %tky = order-%tky %state_area = 'HEADER' ) TO reported-PurchaseOrder.
@@ -218,7 +243,11 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
                           order_date = order-OrderDate currency_code = order-CurrencyCode
                           status = order-Status )
         supplier_exists = xsdbool( line_exists( suppliers[ table_line = order-SupplierID ] ) )
-        number_taken = number_taken ).
+        number_taken = number_taken
+        order_total = REDUCE decfloat34( INIT sum = CONV decfloat34( 0 )
+                        FOR item IN items WHERE ( %is_draft = order-%is_draft
+                                                  AND PurchaseOrderUUID = order-PurchaseOrderUUID )
+                        NEXT sum = sum + item-NetAmount ) ).
       IF issues IS NOT INITIAL.
         APPEND VALUE #( %tky = order-%tky ) TO failed-PurchaseOrder.
       ENDIF.
@@ -233,9 +262,99 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
           WHEN 'ORDERDATE'. <message>-%element-OrderDate = if_abap_behv=>mk-on.
           WHEN 'CURRENCYCODE'. <message>-%element-CurrencyCode = if_abap_behv=>mk-on.
           WHEN 'STATUS'. <message>-%element-Status = if_abap_behv=>mk-on.
+          WHEN 'TOTALAMOUNT'. <message>-%element-TotalAmount = if_abap_behv=>mk-on.
         ENDCASE.
       ENDLOOP.
     ENDLOOP.
+  ENDMETHOD.
+
+  METHOD calculateAmounts.
+    "Runs on every save and in Prepare (always), so deleted items and rows saved
+    "before amounts were calculated are corrected when the order is activated.
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder EXECUTE recalculateAmounts
+      FROM CORRESPONDING #( keys )
+      REPORTED DATA(modify_reported).
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+  ENDMETHOD.
+
+  METHOD recalculateAmounts.
+    TYPES: BEGIN OF ty_item_amount,
+             is_draft TYPE abp_behv_flag,
+             item_uuid TYPE sysuuid_x16,
+             net_amount TYPE zp2p_poit_mf001-net_amount,
+           END OF ty_item_amount,
+           BEGIN OF ty_order_total,
+             is_draft TYPE abp_behv_flag,
+             po_uuid TYPE sysuuid_x16,
+             total_amount TYPE zp2p_po_mf001-total_amount,
+           END OF ty_order_total.
+    DATA item_amounts TYPE STANDARD TABLE OF ty_item_amount WITH EMPTY KEY.
+    DATA order_totals TYPE STANDARD TABLE OF ty_order_total WITH EMPTY KEY.
+    DATA total TYPE decfloat34.
+
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder
+        FIELDS ( TotalAmount ) WITH CORRESPONDING #( keys )
+      RESULT DATA(orders)
+      FAILED DATA(read_failed)
+      REPORTED DATA(read_reported).
+    MOVE-CORRESPONDING read_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    CHECK orders IS NOT INITIAL.
+
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder BY \_Items
+        FIELDS ( PurchaseOrderUUID Quantity UnitPrice NetAmount ) WITH CORRESPONDING #( orders )
+      RESULT DATA(items).
+
+    "Only changed values are written, so repeated runs settle and never loop.
+    LOOP AT orders INTO DATA(order).
+      total = 0.
+      LOOP AT items INTO DATA(item) WHERE %is_draft = order-%is_draft
+                                      AND PurchaseOrderUUID = order-PurchaseOrderUUID.
+        DATA(net_amount) = lcl_p2p_rules=>net_amount( quantity = item-Quantity
+                                                      unit_price = item-UnitPrice ).
+        IF net_amount <> item-NetAmount.
+          APPEND VALUE #( is_draft = item-%is_draft item_uuid = item-PurchaseOrderItemUUID
+                          net_amount = net_amount ) TO item_amounts.
+        ENDIF.
+        total = total + net_amount.
+      ENDLOOP.
+      DATA(total_amount) = lcl_p2p_rules=>fit_amount( total ).
+      IF total_amount <> order-TotalAmount.
+        APPEND VALUE #( is_draft = order-%is_draft po_uuid = order-PurchaseOrderUUID
+                        total_amount = total_amount ) TO order_totals.
+      ENDIF.
+    ENDLOOP.
+    CHECK item_amounts IS NOT INITIAL OR order_totals IS NOT INITIAL.
+
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrderItem UPDATE FIELDS ( NetAmount )
+        WITH VALUE #( FOR amount IN item_amounts
+          ( %is_draft = amount-is_draft PurchaseOrderItemUUID = amount-item_uuid
+            NetAmount = amount-net_amount ) )
+      FAILED DATA(item_failed)
+      REPORTED DATA(item_reported).
+    MOVE-CORRESPONDING item_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING item_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder UPDATE FIELDS ( TotalAmount )
+        WITH VALUE #( FOR order_total IN order_totals
+          ( %is_draft = order_total-is_draft PurchaseOrderUUID = order_total-po_uuid
+            TotalAmount = order_total-total_amount ) )
+      FAILED DATA(order_failed)
+      REPORTED DATA(order_reported).
+    MOVE-CORRESPONDING order_failed TO failed
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    MOVE-CORRESPONDING order_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
   ENDMETHOD.
 ENDCLASS.
 
@@ -247,6 +366,8 @@ CLASS lhc_purchaseorderitem DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR PurchaseOrderItem~setDefaults.
     METHODS validateItem FOR VALIDATE ON SAVE
       IMPORTING keys FOR PurchaseOrderItem~validateItem.
+    METHODS calculateNetAmount FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR PurchaseOrderItem~calculateNetAmount.
 ENDCLASS.
 
 CLASS lhc_purchaseorderitem IMPLEMENTATION.
@@ -387,5 +508,29 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       ENDLOOP.
     ENDLOOP.
   ENDMETHOD.
-ENDCLASS.
 
+  METHOD calculateNetAmount.
+    "The order recalculates all its item amounts and its total in one place.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrderItem
+        FIELDS ( PurchaseOrderUUID ) WITH CORRESPONDING #( keys )
+      RESULT DATA(items)
+      REPORTED DATA(read_reported).
+    "EML and determination responses have different derived types.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    CHECK items IS NOT INITIAL.
+
+    DATA order_keys TYPE TABLE FOR ACTION IMPORT zi_p2p_po_mf001~recalculateAmounts.
+    order_keys = VALUE #( FOR item IN items
+      ( %is_draft = item-%is_draft PurchaseOrderUUID = item-PurchaseOrderUUID ) ).
+    SORT order_keys BY %is_draft PurchaseOrderUUID.
+    DELETE ADJACENT DUPLICATES FROM order_keys COMPARING %is_draft PurchaseOrderUUID.
+
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder EXECUTE recalculateAmounts FROM order_keys
+      REPORTED DATA(modify_reported).
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+  ENDMETHOD.
+ENDCLASS.

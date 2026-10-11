@@ -15,6 +15,8 @@ define root view entity ZC_P2P_PO_MF001
       OrderDate,
       CurrencyCode,
       Status,
+      @Semantics.amount.currencyCode: 'CurrencyCode'
+      TotalAmount,
       CreatedBy,
       CreatedAt,
       LocalLastChangedBy,
