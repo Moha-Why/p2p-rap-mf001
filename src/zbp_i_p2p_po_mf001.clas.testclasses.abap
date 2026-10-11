@@ -20,6 +20,9 @@ CLASS ltc_p2p_rules DEFINITION FINAL FOR TESTING
     METHODS blank_numbers_not_duplicates FOR TESTING.
     METHODS order_reference_taken FOR TESTING.
     METHODS blank_reference_not_taken FOR TESTING.
+    METHODS net_amount_rounding FOR TESTING.
+    METHODS net_amount_overflow FOR TESTING.
+    METHODS order_total_limit FOR TESTING.
 ENDCLASS.
 
 CLASS ltc_p2p_rules IMPLEMENTATION.
@@ -175,5 +178,35 @@ CLASS ltc_p2p_rules IMPLEMENTATION.
                                                 number_taken = abap_true ).
     cl_abap_unit_assert=>assert_equals( exp = 1 act = lines( issues ) ).
     cl_abap_unit_assert=>assert_equals( exp = 'Enter an order reference.' act = issues[ 1 ]-text ).
+  ENDMETHOD.
+
+  METHOD net_amount_rounding.
+    cl_abap_unit_assert=>assert_equals( exp = CONV zp2p_poit_mf001-net_amount( '1000.00' )
+      act = lcl_p2p_rules=>net_amount( quantity = '10.000' unit_price = '100.00' ) ).
+    "1.005 is rounded half up to 1.01.
+    cl_abap_unit_assert=>assert_equals( exp = CONV zp2p_poit_mf001-net_amount( '1.01' )
+      act = lcl_p2p_rules=>net_amount( quantity = '1.005' unit_price = '1.00' ) ).
+    cl_abap_unit_assert=>assert_equals( exp = CONV zp2p_poit_mf001-net_amount( '0.00' )
+      act = lcl_p2p_rules=>net_amount( quantity = '0.001' unit_price = '0.01' ) ).
+  ENDMETHOD.
+
+  METHOD net_amount_overflow.
+    "Too large to store: 0 is returned and check_item reports the overflow.
+    cl_abap_unit_assert=>assert_equals( exp = CONV zp2p_poit_mf001-net_amount( '9999999999999.99' )
+      act = lcl_p2p_rules=>net_amount( quantity = 1 unit_price = '9999999999999.99' ) ).
+    cl_abap_unit_assert=>assert_initial(
+      act = lcl_p2p_rules=>net_amount( quantity = 2 unit_price = '9999999999999.99' ) ).
+  ENDMETHOD.
+
+  METHOD order_total_limit.
+    cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>check_header(
+      header = header supplier_exists = abap_true
+      order_total = CONV decfloat34( lcl_p2p_rules=>max_amount ) ) ).
+    DATA(issues) = lcl_p2p_rules=>check_header(
+      header = header supplier_exists = abap_true
+      order_total = CONV decfloat34( '10000000000000.00' ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = lines( issues ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 'TOTALAMOUNT' act = issues[ 1 ]-field_name ).
+    cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>fit_amount( CONV decfloat34( '10000000000000.00' ) ) ).
   ENDMETHOD.
 ENDCLASS.

@@ -1,6 +1,52 @@
 # Import the reviewed purchase-order draft application
 
-## Revision 007 (current) — what changed and how to test it
+## Revision 008 (current) — amounts
+
+Revision 008 calculates amounts. Changed objects: behavior definition
+ZI_P2P_PO_MF001, behavior class ZBP_I_P2P_PO_MF001, projections
+ZC_P2P_PO_MF001 and ZC_P2P_POIT_MF001, and their metadata extensions. No table
+changes. Nothing is deleted.
+
+- Net amount = quantity × unit price, rounded half up to 2 decimals. It is
+  recalculated as soon as an item's quantity or price changes.
+- Order total = sum of the item net amounts. It updates while you edit items.
+  It is also recalculated on every save, which covers deleted items and orders
+  saved before this revision (their amounts are still 0 until saved again).
+- Net amount and Order total are read-only and now visible in the app:
+  Order total in the order list and order header, Net amount in the item list
+  and item page.
+- A total too large for the amount column is rejected on the Order total field.
+- ABAP Unit: three tests added (19 in total).
+
+The app does not refresh the order total on screen after every keystroke. If
+the header total looks stale while editing, it is correct after Save or after
+refreshing the page.
+
+Pull and test:
+
+1. In abapGit, Pull. Activate all changed objects together (Ctrl+Shift+F3):
+   the behavior definition and the behavior class must activate together.
+2. Run As > ABAP Unit Test on ZBP_I_P2P_PO_MF001. All 19 methods must pass.
+3. Create order PO-TEST-003 (or another unused reference) with item 00010,
+   PROD01, quantity 10, unit price 100. Save. Net amount 1,000.00 EGP and
+   Order total 1,000.00 EGP.
+4. Edit, add item 00020, PROD02, quantity 2, unit price 50.50. Save. Net amount
+   101.00 and Order total 1,101.00.
+5. Edit, change item 00010 quantity to 9. Save. Net amount 900.00 and Order
+   total 1,001.00.
+6. Edit, delete item 00020. Save. Order total 900.00.
+7. Open PO-TEST-001 from before. Edit and Save without changes. Its amounts
+   are now filled in.
+8. Open DEMO-PO-001 (released). It still shows 1,000.00 and cannot be edited.
+9. Service metadata now contains TotalAmount and NetAmount. This replaces
+   step 9 of the runtime gate below ("totals absent").
+
+Record any failure with the object, line, and exact message.
+
+
+## Revision 007 — what changed and how to test it
+
+Activated and tested in SAP on 2026-10-11: all 16 ABAP Unit tests passed.
 
 Revision 006 was activated and tested in SAP. Revision 007 changes only the
 behavior class ZBP_I_P2P_PO_MF001 and deletes one unused class:

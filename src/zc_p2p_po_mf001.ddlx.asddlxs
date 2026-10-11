@@ -40,6 +40,11 @@ annotate entity ZC_P2P_PO_MF001 with
   @UI.identification: [{ qualifier: 'General', position: 50 }]
   Status;
 
+  @EndUserText.label: 'Order total'
+  @UI.lineItem: [{ position: 50, importance: #HIGH }]
+  @UI.identification: [{ qualifier: 'General', position: 60 }]
+  TotalAmount;
+
   @UI.hidden: true
   CreatedBy;
   @UI.hidden: true

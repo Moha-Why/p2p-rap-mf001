@@ -5,6 +5,8 @@ CLASS lcl_p2p_rules DEFINITION FINAL.
     CONSTANTS unit TYPE zp2p_poit_mf001-unit_code VALUE 'EA'.
     CONSTANTS pending TYPE zp2p_po_mf001-status VALUE 'N'.
     CONSTANTS released TYPE zp2p_po_mf001-status VALUE 'R'.
+    "Largest value that fits the CURR(15,2) amount columns.
+    CONSTANTS max_amount TYPE zp2p_po_mf001-total_amount VALUE '9999999999999.99'.
     TYPES:
       BEGIN OF ty_issue,
         field_name TYPE c LENGTH 30,
@@ -22,10 +24,21 @@ CLASS lcl_p2p_rules DEFINITION FINAL.
     CLASS-METHODS check_header
       IMPORTING header TYPE zp2p_po_mf001 supplier_exists TYPE abap_bool
                 number_taken TYPE abap_bool DEFAULT abap_false
+                order_total TYPE decfloat34 DEFAULT 0
       RETURNING VALUE(issues) TYPE tt_issues.
     CLASS-METHODS check_item
       IMPORTING item TYPE zp2p_poit_mf001 product_exists TYPE abap_bool
       RETURNING VALUE(issues) TYPE tt_issues.
+    "Quantity times price, rounded half up to 2 decimals; 0 if it does not fit.
+    CLASS-METHODS net_amount
+      IMPORTING quantity TYPE zp2p_poit_mf001-quantity
+                unit_price TYPE zp2p_poit_mf001-unit_price
+      RETURNING VALUE(result) TYPE zp2p_poit_mf001-net_amount.
+    "The amount itself if it fits the amount columns, otherwise 0.
+    "Validations report the overflow, so a 0 is never activated.
+    CLASS-METHODS fit_amount
+      IMPORTING amount TYPE decfloat34
+      RETURNING VALUE(result) TYPE zp2p_po_mf001-total_amount.
     CLASS-METHODS duplicate_items
       IMPORTING items TYPE tt_item_keys
       RETURNING VALUE(duplicates) TYPE tt_item_keys.

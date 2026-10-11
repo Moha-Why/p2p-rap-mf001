@@ -17,6 +17,8 @@ define view entity ZC_P2P_POIT_MF001
       Quantity,
       @Semantics.amount.currencyCode: 'CurrencyCode'
       UnitPrice,
+      @Semantics.amount.currencyCode: 'CurrencyCode'
+      NetAmount,
       CreatedBy,
       CreatedAt,
       LocalLastChangedBy,
