@@ -3,10 +3,11 @@
 Custom purchase order → goods receipt → supplier invoice application using RAP
 and Fiori. Package: ZP2P_MF001. This repository is the backend source backup.
 
-Current prepared revision: 006 (reviewed 2026-10-11). Purchase-order drafts,
-owner access, reference selections, and basic backend validations are implemented
-in source. Local parser/structural checks pass. SAP activation, ABAP Unit, and
-runtime checks for this revision are still pending.
+Current revision: 007 (2026-10-11). Revision 006 was activated and tested in
+SAP. Purchase-order drafts, owner access, reference selections, and backend
+validations are implemented. Revision 007 adds unique order references,
+ownership-only authorization, and CDS-based reference checks; its SAP
+activation and ABAP Unit run are pending (see docs/IMPORT.md).
 
 Read [import and test instructions](docs/IMPORT.md) and the
 [review record](docs/REVIEW-20261011.md) before importing.

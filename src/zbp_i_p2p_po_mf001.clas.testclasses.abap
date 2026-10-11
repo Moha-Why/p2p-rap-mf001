@@ -17,6 +17,9 @@ CLASS ltc_p2p_rules DEFINITION FINAL FOR TESTING
     METHODS amount_overflow FOR TESTING.
     METHODS duplicate_lines FOR TESTING.
     METHODS other_orders_and_drafts FOR TESTING.
+    METHODS blank_numbers_not_duplicates FOR TESTING.
+    METHODS order_reference_taken FOR TESTING.
+    METHODS blank_reference_not_taken FOR TESTING.
 ENDCLASS.
 
 CLASS ltc_p2p_rules IMPLEMENTATION.
@@ -111,7 +114,6 @@ CLASS ltc_p2p_rules IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = 2 act = lines( issues ) ).
     cl_abap_unit_assert=>assert_true( act = xsdbool( line_exists( issues[ field_name = 'UNITCODE' ] ) ) ).
     cl_abap_unit_assert=>assert_true( act = xsdbool( line_exists( issues[ field_name = 'CURRENCYCODE' ] ) ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 'USD' act = item-currency_code ).
   ENDMETHOD.
 
   METHOD amount_overflow.
@@ -148,5 +150,30 @@ CLASS ltc_p2p_rules IMPLEMENTATION.
         item_uuid = '00000000000000000000000000000012' item_number = '00010' ) ).
     cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>duplicate_items( items ) ).
   ENDMETHOD.
-ENDCLASS.
 
+  METHOD blank_numbers_not_duplicates.
+    "Blank numbers get one 'required' message from check_item, not a second duplicate message.
+    DATA(items) = VALUE lcl_p2p_rules=>tt_item_keys(
+      ( is_draft = if_abap_behv=>mk-on po_uuid = '00000000000000000000000000000001'
+        item_uuid = '00000000000000000000000000000011' )
+      ( is_draft = if_abap_behv=>mk-on po_uuid = '00000000000000000000000000000001'
+        item_uuid = '00000000000000000000000000000012' ) ).
+    cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>duplicate_items( items ) ).
+  ENDMETHOD.
+
+  METHOD order_reference_taken.
+    DATA(issues) = lcl_p2p_rules=>check_header( header = header supplier_exists = abap_true
+                                                number_taken = abap_true ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = lines( issues ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 'PURCHASEORDERNUMBER' act = issues[ 1 ]-field_name ).
+  ENDMETHOD.
+
+  METHOD blank_reference_not_taken.
+    "A missing reference gets the 'enter' message only, never the 'already used' one too.
+    CLEAR header-po_number.
+    DATA(issues) = lcl_p2p_rules=>check_header( header = header supplier_exists = abap_true
+                                                number_taken = abap_true ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = lines( issues ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 'Enter an order reference.' act = issues[ 1 ]-text ).
+  ENDMETHOD.
+ENDCLASS.

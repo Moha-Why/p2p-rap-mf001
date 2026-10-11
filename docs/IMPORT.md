@@ -1,5 +1,42 @@
 # Import the reviewed purchase-order draft application
 
+## Revision 007 (current) — what changed and how to test it
+
+Revision 006 was activated and tested in SAP. Revision 007 changes only the
+behavior class ZBP_I_P2P_PO_MF001 and deletes one unused class:
+
+- Order references must be unique among your own active orders. Saving a second
+  order with an existing reference fails on the Order reference field.
+- Authorization now checks ownership only. Released orders are still frozen by
+  feature control, so the UI and OData behave the same as before.
+- Supplier/product checks read the CDS views ZI_P2P_SUPP_MF001 and
+  ZI_P2P_PROD_MF001, so their access roles and the EA rule apply in one place.
+- Two items with an empty item number now get only the "Enter an item number"
+  message, not an extra "must be unique" message.
+- ZCL_P2P_START_MF001 (milestone-1 hello world) is deleted. When abapGit shows
+  it as an object to delete during Pull, confirm the deletion.
+- ABAP Unit: one meaningless assertion removed, three tests added (16 in total).
+
+Pull and test:
+
+1. In abapGit, Pull. Accept the changed behavior class and the deletion.
+2. Activate ZBP_I_P2P_PO_MF001.
+3. Run As > ABAP Unit Test on ZBP_I_P2P_PO_MF001. All 16 methods must pass.
+4. Create an order with reference PO-TEST-001 again while your existing
+   PO-TEST-001 is still there. Saving must fail on Order reference. Change it
+   to PO-TEST-002 and the save must succeed.
+5. Open an existing order, change only the quantity, and save. It must not
+   complain about its own reference.
+6. Open DEMO-PO-001 (released). Edit and Delete must still be unavailable.
+7. Choose an unknown supplier or product. Saving must still fail.
+8. Add two items without item numbers. Each item shows one message only.
+9. With a second SAP user, confirm that you still can't see or change the
+   first user's orders.
+
+Record any failure with the object, line, and exact message. The rest of this
+file describes revision 006 and still applies.
+
+
 Current revision: 006, reviewed 2026-10-11. This replaces the earlier snippets
 and prepared ZIPs 001–005. All required edits are already in abapgit/src.
 You do not need to apply the earlier currency or behavior patches separately.
