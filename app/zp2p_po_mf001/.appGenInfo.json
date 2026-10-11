@@ -1,0 +1,33 @@
+{
+  "generationParameters": {
+    "generationDate": "Sun Oct 11 2026 12:57:35 GMT+0000 (Coordinated Universal Time)",
+    "generatorPlatform": "SAP Business Application Studio",
+    "serviceType": "SAP System (ABAP Cloud)",
+    "metadataFilename": "",
+    "serviceUrl": "https://cb6549d4-2ebc-4106-94c5-35da55fca11f.abap.ap21.hana.ondemand.com/sap/opu/odata4/sap/zui_p2p_mf001_o4/srvd/sap/zui_p2p_mf001/0001/",
+    "appName": "zp2p_po_mf001",
+    "appTitle": "Purchase Orders",
+    "appDescription": "An SAP Fiori application.",
+    "appNamespace": "",
+    "ui5Theme": "sap_horizon",
+    "ui5Version": "1.148.10",
+    "enableEslint": true,
+    "enableTypeScript": false,
+    "showMockDataInfo": true,
+    "generatorVersion": "1.33.0",
+    "template": "List Report Page V4",
+    "generatorName": "SAP Fiori Application Generator",
+    "entityRelatedConfig": [
+      {
+        "type": "Main Entity",
+        "value": "PurchaseOrders"
+      },
+      {
+        "type": "Navigation Entity",
+        "value": "_Items"
+      }
+    ],
+    "launchText": "To launch the generated application, run the following from the generated application root folder:\n\n```\n    npm start\n```",
+    "valueHelpDownloaded": true
+  }
+}
