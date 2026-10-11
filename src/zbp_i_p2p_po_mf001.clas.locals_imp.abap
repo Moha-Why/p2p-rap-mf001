@@ -2,10 +2,10 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
   METHOD check_header.
     IF header-po_number IS INITIAL.
       APPEND VALUE #( field_name = 'PURCHASEORDERNUMBER'
-                      text = 'Enter an order reference.' ) TO issues.
+                      text = 'No order number was assigned. Check the order number range setup.' ) TO issues.
     ELSEIF number_taken = abap_true.
       APPEND VALUE #( field_name = 'PURCHASEORDERNUMBER'
-                      text = 'Another of your orders already uses this order reference.' ) TO issues.
+                      text = 'Another of your orders already uses this order number.' ) TO issues.
     ENDIF.
     IF header-supplier_id IS INITIAL OR supplier_exists = abap_false.
       APPEND VALUE #( field_name = 'SUPPLIERID'
@@ -73,6 +73,19 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
     ENDIF.
   ENDMETHOD.
 
+  METHOD format_po_number.
+    DATA digits TYPE n LENGTH 7.
+    digits = counter.
+    result = |{ po_number_prefix }{ digits }|.
+  ENDMETHOD.
+
+  METHOD next_item_number.
+    CONSTANTS largest TYPE zp2p_poit_mf001-item_number VALUE '99999'.
+    IF highest <= largest - item_number_step.
+      result = highest + item_number_step.
+    ENDIF.
+  ENDMETHOD.
+
   METHOD duplicate_items.
     "Blank numbers are reported as missing by check_item, not as duplicates.
     LOOP AT items INTO DATA(item) WHERE item_number IS NOT INITIAL
@@ -96,6 +109,8 @@ CLASS lhc_purchaseorder DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR PurchaseOrder~setDefaults.
     METHODS validateHeader FOR VALIDATE ON SAVE
       IMPORTING keys FOR PurchaseOrder~validateHeader.
+    METHODS assignOrderNumber FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR PurchaseOrder~assignOrderNumber.
     METHODS calculateAmounts FOR DETERMINE ON SAVE
       IMPORTING keys FOR PurchaseOrder~calculateAmounts.
     METHODS recalculateAmounts FOR MODIFY
@@ -268,6 +283,65 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
+  METHOD assignOrderNumber.
+    "Numbers are drawn when an order is created (also as a draft), like SAP's
+    "early numbering samples. A discarded draft leaves a gap; that is expected.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder
+        FIELDS ( PurchaseOrderNumber ) WITH CORRESPONDING #( keys )
+      RESULT DATA(orders)
+      REPORTED DATA(read_reported).
+    "EML and determination responses have different derived types.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    DELETE orders WHERE PurchaseOrderNumber IS NOT INITIAL.
+    CHECK orders IS NOT INITIAL.
+
+    TRY.
+        cl_numberrange_runtime=>number_get(
+          EXPORTING nr_range_nr       = lcl_p2p_rules=>po_number_interval
+                    object            = lcl_p2p_rules=>po_number_object
+                    quantity          = CONV #( lines( orders ) )
+          IMPORTING number            = DATA(last_number)
+                    returned_quantity = DATA(returned_quantity) ).
+      CATCH cx_number_ranges INTO DATA(number_error).
+        "The orders stay without a number; validateHeader blocks their activation.
+        LOOP AT orders INTO DATA(order_without_number).
+          APPEND VALUE #( %tky = order_without_number-%tky %msg = number_error )
+            TO reported-PurchaseOrder.
+        ENDLOOP.
+        RETURN.
+    ENDTRY.
+
+    "The returned numbers are the last returned_quantity numbers up to last_number.
+    "If the interval ran short, the remaining orders stay without a number.
+    TYPES: BEGIN OF ty_order_number,
+             is_draft TYPE abp_behv_flag,
+             po_uuid TYPE sysuuid_x16,
+             po_number TYPE zp2p_po_mf001-po_number,
+           END OF ty_order_number.
+    DATA order_numbers TYPE STANDARD TABLE OF ty_order_number WITH EMPTY KEY.
+    DATA counter TYPE int8.
+    counter = last_number - returned_quantity.
+    LOOP AT orders INTO DATA(order).
+      IF sy-tabix > returned_quantity.
+        EXIT.
+      ENDIF.
+      counter = counter + 1.
+      APPEND VALUE #( is_draft = order-%is_draft po_uuid = order-PurchaseOrderUUID
+                      po_number = lcl_p2p_rules=>format_po_number( counter ) ) TO order_numbers.
+    ENDLOOP.
+
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder UPDATE FIELDS ( PurchaseOrderNumber )
+      WITH VALUE #( FOR order_number IN order_numbers
+        ( %is_draft = order_number-is_draft PurchaseOrderUUID = order_number-po_uuid
+          PurchaseOrderNumber = order_number-po_number ) )
+      REPORTED DATA(modify_reported).
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+  ENDMETHOD.
+
   METHOD calculateAmounts.
     "Runs on every save and in Prepare (always), so deleted items and rows saved
     "before amounts were calculated are corrected when the order is activated.
@@ -368,6 +442,8 @@ CLASS lhc_purchaseorderitem DEFINITION INHERITING FROM cl_abap_behavior_handler.
       IMPORTING keys FOR PurchaseOrderItem~validateItem.
     METHODS calculateNetAmount FOR DETERMINE ON MODIFY
       IMPORTING keys FOR PurchaseOrderItem~calculateNetAmount.
+    METHODS assignItemNumber FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR PurchaseOrderItem~assignItemNumber.
 ENDCLASS.
 
 CLASS lhc_purchaseorderitem IMPLEMENTATION.
@@ -529,6 +605,82 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
 
     MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
       ENTITY PurchaseOrder EXECUTE recalculateAmounts FROM order_keys
+      REPORTED DATA(modify_reported).
+    MOVE-CORRESPONDING modify_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+  ENDMETHOD.
+
+  METHOD assignItemNumber.
+    "Proposes the next number (highest + 10) for new items left without one.
+    "The number stays editable; validateItem still rejects duplicates.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrderItem
+        FIELDS ( PurchaseOrderUUID ItemNumber ) WITH CORRESPONDING #( keys )
+      RESULT DATA(new_items)
+      REPORTED DATA(read_reported).
+    "EML and determination responses have different derived types.
+    MOVE-CORRESPONDING read_reported TO reported
+      EXPANDING NESTED TABLES KEEPING TARGET LINES.
+    DELETE new_items WHERE ItemNumber IS NOT INITIAL.
+    CHECK new_items IS NOT INITIAL.
+
+    "Read siblings from the transactional buffer, including unsaved items.
+    DATA parent_keys TYPE TABLE FOR READ IMPORT zi_p2p_po_mf001\_Items.
+    parent_keys = VALUE #( FOR src IN new_items
+      ( %is_draft = src-%is_draft PurchaseOrderUUID = src-PurchaseOrderUUID ) ).
+    SORT parent_keys BY %is_draft PurchaseOrderUUID.
+    DELETE ADJACENT DUPLICATES FROM parent_keys COMPARING %is_draft PurchaseOrderUUID.
+    READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrder BY \_Items
+        FIELDS ( PurchaseOrderUUID ItemNumber ) WITH parent_keys
+      RESULT DATA(siblings).
+
+    "Highest number per order; raised as numbers are handed out below.
+    TYPES: BEGIN OF ty_highest,
+             is_draft TYPE abp_behv_flag,
+             po_uuid TYPE sysuuid_x16,
+             item_number TYPE zp2p_poit_mf001-item_number,
+           END OF ty_highest,
+           BEGIN OF ty_item_number,
+             is_draft TYPE abp_behv_flag,
+             item_uuid TYPE sysuuid_x16,
+             item_number TYPE zp2p_poit_mf001-item_number,
+           END OF ty_item_number.
+    DATA highest TYPE HASHED TABLE OF ty_highest WITH UNIQUE KEY is_draft po_uuid.
+    DATA item_numbers TYPE STANDARD TABLE OF ty_item_number WITH EMPTY KEY.
+    LOOP AT siblings INTO DATA(sibling).
+      ASSIGN highest[ is_draft = sibling-%is_draft po_uuid = sibling-PurchaseOrderUUID ]
+        TO FIELD-SYMBOL(<highest>).
+      IF sy-subrc <> 0.
+        INSERT VALUE #( is_draft = sibling-%is_draft po_uuid = sibling-PurchaseOrderUUID )
+          INTO TABLE highest ASSIGNING <highest>.
+      ENDIF.
+      IF sibling-ItemNumber > <highest>-item_number.
+        <highest>-item_number = sibling-ItemNumber.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT new_items INTO DATA(new_item).
+      ASSIGN highest[ is_draft = new_item-%is_draft po_uuid = new_item-PurchaseOrderUUID ]
+        TO <highest>.
+      IF sy-subrc <> 0.
+        CONTINUE.
+      ENDIF.
+      DATA(next_number) = lcl_p2p_rules=>next_item_number( <highest>-item_number ).
+      IF next_number IS INITIAL.
+        CONTINUE.
+      ENDIF.
+      <highest>-item_number = next_number.
+      APPEND VALUE #( is_draft = new_item-%is_draft item_uuid = new_item-PurchaseOrderItemUUID
+                      item_number = next_number ) TO item_numbers.
+    ENDLOOP.
+    CHECK item_numbers IS NOT INITIAL.
+
+    MODIFY ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
+      ENTITY PurchaseOrderItem UPDATE FIELDS ( ItemNumber )
+      WITH VALUE #( FOR item_number IN item_numbers
+        ( %is_draft = item_number-is_draft PurchaseOrderItemUUID = item_number-item_uuid
+          ItemNumber = item_number-item_number ) )
       REPORTED DATA(modify_reported).
     MOVE-CORRESPONDING modify_reported TO reported
       EXPANDING NESTED TABLES KEEPING TARGET LINES.

@@ -14,14 +14,15 @@ etag master LocalLastChangedAt
   delete ( features : instance );
 
   field ( readonly, numbering : managed ) PurchaseOrderUUID;
-  field ( readonly ) Status, CurrencyCode, TotalAmount,
+  field ( readonly ) PurchaseOrderNumber, Status, CurrencyCode, TotalAmount,
                      CreatedBy, CreatedAt, LocalLastChangedBy,
                      LocalLastChangedAt, LastChangedAt;
-  field ( mandatory ) PurchaseOrderNumber, SupplierID, OrderDate;
+  field ( mandatory ) SupplierID, OrderDate;
 
   association _Items { create ( features : instance, authorization : update ); with draft; }
 
   determination setDefaults on modify { create; }
+  determination assignOrderNumber on modify { create; }
   determination calculateAmounts on save { create; update; }
   validation validateHeader on save { create; update; }
 
@@ -73,6 +74,7 @@ etag master LocalLastChangedAt
 
   association _PurchaseOrder { with draft; }
   determination setDefaults on modify { create; }
+  determination assignItemNumber on modify { create; }
   determination calculateNetAmount on modify { create; field Quantity, UnitPrice; }
   validation validateItem on save { create; update; }
 

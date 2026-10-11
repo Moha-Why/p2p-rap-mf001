@@ -14,7 +14,7 @@ annotate entity ZC_P2P_PO_MF001 with
   @UI.hidden: true
   PurchaseOrderUUID;
 
-  @EndUserText.label: 'Order reference'
+  @EndUserText.label: 'Order number'
   @UI.lineItem: [{ position: 10, importance: #HIGH }]
   @UI.identification: [{ qualifier: 'General', position: 10 }]
   PurchaseOrderNumber;
