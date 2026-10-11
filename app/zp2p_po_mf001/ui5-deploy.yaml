@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://sap.github.io/ui5-tooling/schema/ui5.yaml.json
+
+specVersion: "4.0"
+metadata:
+  name: zp2ppomf001
+type: application
+builder:
+  resources:
+    excludes:
+      - /test/**
+      - /localService/**
+  customTasks:
+    - name: deploy-to-abap
+      afterTask: generateCachebusterInfo
+      configuration:
+        target:
+          destination: abap-cloud-default_abap-trial-f3d2ce78trial-dev
+          url: https://cb6549d4-2ebc-4106-94c5-35da55fca11f.abap.ap21.hana.ondemand.com/
+          scp: true
+        app:
+          name: ZP2P_PO_MF001
+          description: P2P purchase orders app
+          package: ZP2P_MF001
+          transport: ''
+        exclude:
+          - /test/
+          - /localService/
