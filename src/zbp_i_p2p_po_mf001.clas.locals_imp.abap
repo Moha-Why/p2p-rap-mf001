@@ -80,9 +80,11 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD next_item_number.
-    CONSTANTS largest TYPE zp2p_poit_mf001-item_number VALUE '99999'.
-    IF highest <= largest - item_number_step.
-      result = highest + item_number_step.
+    "Item numbers are NUMC (character-like), so calculate in an integer.
+    CONSTANTS largest TYPE i VALUE 99999.
+    DATA(next) = CONV i( highest ) + item_number_step.
+    IF next <= largest.
+      result = next.
     ENDIF.
   ENDMETHOD.
 
