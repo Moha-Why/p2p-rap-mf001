@@ -7,6 +7,11 @@ CLASS lcl_p2p_rules DEFINITION FINAL.
     CONSTANTS released TYPE zp2p_po_mf001-status VALUE 'R'.
     "Largest value that fits the CURR(15,2) amount columns.
     CONSTANTS max_amount TYPE zp2p_po_mf001-total_amount VALUE '9999999999999.99'.
+    "Order numbers: number range object ZP2P_MF001, interval 01 (7 digits).
+    CONSTANTS po_number_object TYPE cl_numberrange_runtime=>nr_object VALUE 'ZP2P_MF001'.
+    CONSTANTS po_number_interval TYPE cl_numberrange_runtime=>nr_interval VALUE '01'.
+    CONSTANTS po_number_prefix TYPE string VALUE `PO-`.
+    CONSTANTS item_number_step TYPE i VALUE 10.
     TYPES:
       BEGIN OF ty_issue,
         field_name TYPE c LENGTH 30,
@@ -39,6 +44,14 @@ CLASS lcl_p2p_rules DEFINITION FINAL.
     CLASS-METHODS fit_amount
       IMPORTING amount TYPE decfloat34
       RETURNING VALUE(result) TYPE zp2p_po_mf001-total_amount.
+    "PO- followed by the 7-digit counter, e.g. PO-0000042.
+    CLASS-METHODS format_po_number
+      IMPORTING counter TYPE int8
+      RETURNING VALUE(result) TYPE zp2p_po_mf001-po_number.
+    "Next item number after the highest one (10, 20, 30 ...); initial if none fits.
+    CLASS-METHODS next_item_number
+      IMPORTING highest TYPE zp2p_poit_mf001-item_number
+      RETURNING VALUE(result) TYPE zp2p_poit_mf001-item_number.
     CLASS-METHODS duplicate_items
       IMPORTING items TYPE tt_item_keys
       RETURNING VALUE(duplicates) TYPE tt_item_keys.

@@ -1,6 +1,50 @@
 # Import the reviewed purchase-order draft application
 
-## Revision 008 (current) — amounts
+## Revision 009 (current) — automatic order and item numbers
+
+New objects: domain ZP2P_PONR_MF001 (7-digit counter), number range object
+ZP2P_MF001, and class ZCL_P2P_SETUP_MF001 (one-time interval setup). Changed:
+behavior definition ZI_P2P_PO_MF001, behavior class ZBP_I_P2P_PO_MF001, and
+metadata extension ZC_P2P_PO_MF001 (label "Order number"). No table changes.
+
+- A new order gets its number as soon as it is created: PO- plus a 7-digit
+  counter, for example PO-0000001. The field is read-only.
+- Numbers are drawn when the draft is created, as in SAP's own RAP samples.
+  A discarded draft leaves a gap in the sequence. That is normal; SAP's
+  standard purchase order numbers have gaps too.
+- A new item gets the next item number (highest in the order + 10). You can
+  still overwrite it; duplicates are still rejected.
+- Existing orders keep their current references (PO-TEST-001, DEMO-PO-001).
+- ABAP Unit: two tests added (21 in total).
+
+Pull, set up, and test:
+
+1. In abapGit, Pull. It creates the domain, the number range object, and the
+   setup class. Activate all inactive objects together (Ctrl+Shift+F3).
+   If abapGit cannot create number range object ZP2P_MF001, create it in ADT
+   in package ZP2P_MF001 (New > Other ABAP Repository Object, search "Number
+   Range"): name ZP2P_MF001, number length domain ZP2P_PONR_MF001, warning
+   10%, buffering in main memory. Then activate.
+2. Run ZCL_P2P_SETUP_MF001 once (F9). It must print "Order number interval 01
+   created: PO-0000001 to PO-9999999." A second run prints "already exists".
+3. Run As > ABAP Unit Test on ZBP_I_P2P_PO_MF001. All 21 methods must pass.
+4. In the app, choose Create. The new draft shows an order number such as
+   PO-0000001 right away, and the field cannot be edited.
+5. Add three items without typing item numbers: they get 00010, 00020, 00030.
+6. Change the third item's number to 00015, then add another item: it gets
+   00025. Change it to 00010: saving fails with the duplicate message.
+7. Fix the number, enter supplier, product, quantity, and price, and save.
+8. Create another order and discard the draft, then create a third order.
+   The third order skips one number (the discarded draft used it).
+9. Open PO-TEST-001: it keeps its old reference and can still be edited.
+
+If step 2 or step 4 fails, record the exact message. Without the interval,
+new orders show a number range message and cannot be saved.
+
+
+## Revision 008 — amounts
+
+Activated and tested in SAP on 2026-10-11: all 19 ABAP Unit tests passed.
 
 Revision 008 calculates amounts. Changed objects: behavior definition
 ZI_P2P_PO_MF001, behavior class ZBP_I_P2P_PO_MF001, projections

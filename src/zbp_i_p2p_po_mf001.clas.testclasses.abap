@@ -23,6 +23,8 @@ CLASS ltc_p2p_rules DEFINITION FINAL FOR TESTING
     METHODS net_amount_rounding FOR TESTING.
     METHODS net_amount_overflow FOR TESTING.
     METHODS order_total_limit FOR TESTING.
+    METHODS po_number_format FOR TESTING.
+    METHODS item_number_sequence FOR TESTING.
 ENDCLASS.
 
 CLASS ltc_p2p_rules IMPLEMENTATION.
@@ -172,12 +174,13 @@ CLASS ltc_p2p_rules IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD blank_reference_not_taken.
-    "A missing reference gets the 'enter' message only, never the 'already used' one too.
+    "A missing number gets the 'not assigned' message only, never the 'already used' one too.
     CLEAR header-po_number.
     DATA(issues) = lcl_p2p_rules=>check_header( header = header supplier_exists = abap_true
                                                 number_taken = abap_true ).
     cl_abap_unit_assert=>assert_equals( exp = 1 act = lines( issues ) ).
-    cl_abap_unit_assert=>assert_equals( exp = 'Enter an order reference.' act = issues[ 1 ]-text ).
+    cl_abap_unit_assert=>assert_equals(
+      exp = 'No order number was assigned. Check the order number range setup.' act = issues[ 1 ]-text ).
   ENDMETHOD.
 
   METHOD net_amount_rounding.
@@ -208,5 +211,24 @@ CLASS ltc_p2p_rules IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = 1 act = lines( issues ) ).
     cl_abap_unit_assert=>assert_equals( exp = 'TOTALAMOUNT' act = issues[ 1 ]-field_name ).
     cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>fit_amount( CONV decfloat34( '10000000000000.00' ) ) ).
+  ENDMETHOD.
+
+  METHOD po_number_format.
+    cl_abap_unit_assert=>assert_equals( exp = 'PO-0000001'
+      act = lcl_p2p_rules=>format_po_number( CONV int8( 1 ) ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 'PO-9999999'
+      act = lcl_p2p_rules=>format_po_number( CONV int8( 9999999 ) ) ).
+  ENDMETHOD.
+
+  METHOD item_number_sequence.
+    cl_abap_unit_assert=>assert_equals( exp = CONV zp2p_poit_mf001-item_number( '00010' )
+      act = lcl_p2p_rules=>next_item_number( '00000' ) ).
+    "A manually entered 15 is followed by 25.
+    cl_abap_unit_assert=>assert_equals( exp = CONV zp2p_poit_mf001-item_number( '00025' )
+      act = lcl_p2p_rules=>next_item_number( '00015' ) ).
+    cl_abap_unit_assert=>assert_equals( exp = CONV zp2p_poit_mf001-item_number( '99999' )
+      act = lcl_p2p_rules=>next_item_number( '99989' ) ).
+    "No room left: no number is proposed, validateItem asks for one.
+    cl_abap_unit_assert=>assert_initial( act = lcl_p2p_rules=>next_item_number( '99990' ) ).
   ENDMETHOD.
 ENDCLASS.
