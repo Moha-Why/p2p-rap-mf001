@@ -236,22 +236,25 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
       EXPANDING NESTED TABLES KEEPING TARGET LINES.
     CHECK orders IS NOT INITIAL.
 
-    "The CDS access roles restrict both selects to the current user's own rows.
+    "Behavior handlers read tables with an explicit owner filter. They must not
+    "rely on CDS access control (ABAP contract check UNPRIVILEGED SELECT).
+    DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
     DATA suppliers TYPE SORTED TABLE OF zp2p_supp_mf001-supplier_id
       WITH UNIQUE KEY table_line.
-    SELECT FROM zi_p2p_supp_mf001
-      FIELDS SupplierID
+    SELECT FROM zp2p_supp_mf001
+      FIELDS supplier_id
       FOR ALL ENTRIES IN @orders
-      WHERE SupplierID = @orders-SupplierID
+      WHERE owner_id = @owner AND supplier_id = @orders-SupplierID
       INTO TABLE @suppliers.
 
-    "Order references must be unique among the user's active orders. Editing an
+    "Order numbers must be unique among the user's active orders. Editing an
     "existing order keeps its UUID, so the order never clashes with itself.
-    SELECT FROM zi_p2p_po_mf001
-      FIELDS PurchaseOrderUUID, PurchaseOrderNumber
+    SELECT FROM zp2p_po_mf001
+      FIELDS po_uuid AS PurchaseOrderUUID, po_number AS PurchaseOrderNumber
       FOR ALL ENTRIES IN @orders
-      WHERE PurchaseOrderNumber = @orders-PurchaseOrderNumber
-        AND PurchaseOrderUUID <> @orders-PurchaseOrderUUID
+      WHERE created_by = @owner
+        AND po_number = @orders-PurchaseOrderNumber
+        AND po_uuid <> @orders-PurchaseOrderUUID
       INTO TABLE @DATA(clashes).
 
     "Net amounts are recalculated by calculateAmounts before validations run.
@@ -596,13 +599,15 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       EXPANDING NESTED TABLES KEEPING TARGET LINES.
     CHECK items IS NOT INITIAL.
 
-    "The CDS view admits only EA products; its access role admits only own rows.
+    "Own EA products only (table read, see validateHeader for why).
+    DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
     DATA products TYPE SORTED TABLE OF zp2p_prod_mf001-product_id
       WITH UNIQUE KEY table_line.
-    SELECT FROM zi_p2p_prod_mf001
-      FIELDS ProductID
+    SELECT FROM zp2p_prod_mf001
+      FIELDS product_id
       FOR ALL ENTRIES IN @items
-      WHERE ProductID = @items-ProductID
+      WHERE owner_id = @owner AND product_id = @items-ProductID
+        AND unit_code = @lcl_p2p_rules=>unit
       INTO TABLE @products.
 
     "Read siblings from the transactional buffer, including unsaved changes.
@@ -777,11 +782,13 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
     DELETE items WHERE ProductID IS INITIAL.
     CHECK items IS NOT INITIAL.
 
-    "The CDS view admits only the user's own EA products.
-    SELECT FROM zi_p2p_prod_mf001
-      FIELDS ProductID, ProductName
+    "Own EA products only (table read, see validateHeader for why).
+    DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
+    SELECT FROM zp2p_prod_mf001
+      FIELDS product_id AS ProductID, product_name AS ProductName
       FOR ALL ENTRIES IN @items
-      WHERE ProductID = @items-ProductID
+      WHERE owner_id = @owner AND product_id = @items-ProductID
+        AND unit_code = @lcl_p2p_rules=>unit
       INTO TABLE @DATA(products).
 
     TYPES: BEGIN OF ty_description,
