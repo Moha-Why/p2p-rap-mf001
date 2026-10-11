@@ -7,9 +7,11 @@ define view entity ZC_P2P_POIT_MF001
   key PurchaseOrderItemUUID,
       PurchaseOrderUUID,
       ItemNumber,
+      @ObjectModel.text.element: ['ProductName']
       @Consumption.valueHelpDefinition: [{ entity: {
         name: 'ZI_P2P_PROD_MF001', element: 'ProductID' }, useForValidation: true }]
       ProductID,
+      _Product.ProductName as ProductName,
       ItemDescription,
       UnitCode,
       CurrencyCode,

@@ -5,6 +5,9 @@ define view entity ZI_P2P_POIT_MF001
   as select from zp2p_poit_mf001
   association to parent ZI_P2P_PO_MF001 as _PurchaseOrder
     on $projection.PurchaseOrderUUID = _PurchaseOrder.PurchaseOrderUUID
+  association [0..1] to ZI_P2P_PROD_MF001 as _Product
+    on  $projection.ProductID = _Product.ProductID
+    and $projection.CreatedBy = _Product.OwnerID
 {
   key item_uuid         as PurchaseOrderItemUUID,
       po_uuid           as PurchaseOrderUUID,
@@ -29,5 +32,6 @@ define view entity ZI_P2P_POIT_MF001
       local_last_changed_at as LocalLastChangedAt,
       @Semantics.systemDateTime.lastChangedAt: true
       last_changed_at   as LastChangedAt,
-      _PurchaseOrder
+      _PurchaseOrder,
+      _Product
 }

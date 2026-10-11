@@ -27,6 +27,7 @@ etag master LocalLastChangedAt
   validation validateHeader on save { create; update; }
 
   internal action recalculateAmounts;
+  action ( features : instance, authorization : update ) releaseOrder result [1] $self;
 
   draft action ( features : instance ) Edit;
   draft action Activate optimized;
@@ -76,7 +77,15 @@ etag master LocalLastChangedAt
   determination setDefaults on modify { create; }
   determination assignItemNumber on modify { create; }
   determination calculateNetAmount on modify { create; field Quantity, UnitPrice; }
+  determination setItemDescription on modify { field ProductID; }
   validation validateItem on save { create; update; }
+
+  side effects
+  {
+    field Quantity affects field NetAmount, field _PurchaseOrder.TotalAmount;
+    field UnitPrice affects field NetAmount, field _PurchaseOrder.TotalAmount;
+    field ProductID affects field ItemDescription;
+  }
 
   mapping for zp2p_poit_mf001
   {

@@ -52,6 +52,11 @@ CLASS lcl_p2p_rules DEFINITION FINAL.
     CLASS-METHODS next_item_number
       IMPORTING highest TYPE zp2p_poit_mf001-item_number
       RETURNING VALUE(result) TYPE zp2p_poit_mf001-item_number.
+    "Why an order cannot be released; empty if it can.
+    CLASS-METHODS release_blocker
+      IMPORTING status TYPE zp2p_po_mf001-status
+                has_items TYPE abap_bool
+      RETURNING VALUE(result) TYPE string.
     CLASS-METHODS duplicate_items
       IMPORTING items TYPE tt_item_keys
       RETURNING VALUE(duplicates) TYPE tt_item_keys.

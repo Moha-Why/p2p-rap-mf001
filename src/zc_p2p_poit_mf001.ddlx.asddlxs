@@ -21,6 +21,8 @@ annotate entity ZC_P2P_POIT_MF001 with
   @UI.lineItem: [{ position: 20, importance: #HIGH }]
   @UI.identification: [{ position: 20 }]
   ProductID;
+  @UI.hidden: true
+  ProductName;
 
   @EndUserText.label: 'Description'
   @UI.lineItem: [{ position: 30 }]
