@@ -3,6 +3,9 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
     IF header-po_number IS INITIAL.
       APPEND VALUE #( field_name = 'PURCHASEORDERNUMBER'
                       text = 'Enter an order reference.' ) TO issues.
+    ELSEIF number_taken = abap_true.
+      APPEND VALUE #( field_name = 'PURCHASEORDERNUMBER'
+                      text = 'Another of your orders already uses this order reference.' ) TO issues.
     ENDIF.
     IF header-supplier_id IS INITIAL OR supplier_exists = abap_false.
       APPEND VALUE #( field_name = 'SUPPLIERID'
@@ -56,22 +59,13 @@ CLASS lcl_p2p_rules IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD duplicate_items.
-    TYPES: BEGIN OF ty_count,
-             is_draft TYPE abp_behv_flag,
-             po_uuid TYPE sysuuid_x16,
-             item_number TYPE zp2p_poit_mf001-item_number,
-             count TYPE i,
-           END OF ty_count.
-    DATA counts TYPE HASHED TABLE OF ty_count
-      WITH UNIQUE KEY is_draft po_uuid item_number.
-    LOOP AT items INTO DATA(item).
-      COLLECT VALUE ty_count( is_draft = item-is_draft po_uuid = item-po_uuid
-                             item_number = item-item_number count = 1 ) INTO counts.
-    ENDLOOP.
-    LOOP AT items INTO item.
-      IF counts[ is_draft = item-is_draft po_uuid = item-po_uuid
-                 item_number = item-item_number ]-count > 1.
-        APPEND item TO duplicates.
+    "Blank numbers are reported as missing by check_item, not as duplicates.
+    LOOP AT items INTO DATA(item) WHERE item_number IS NOT INITIAL
+         GROUP BY ( is_draft = item-is_draft po_uuid = item-po_uuid
+                    item_number = item-item_number size = GROUP SIZE )
+         INTO DATA(group).
+      IF group-size > 1.
+        duplicates = VALUE #( BASE duplicates FOR member IN GROUP group ( member ) ).
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
@@ -93,7 +87,7 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
   METHOD get_instance_authorizations.
     READ ENTITIES OF zi_p2p_po_mf001 IN LOCAL MODE
       ENTITY PurchaseOrder
-        FIELDS ( CreatedBy Status ) WITH CORRESPONDING #( keys )
+        FIELDS ( CreatedBy ) WITH CORRESPONDING #( keys )
       RESULT DATA(orders)
       FAILED DATA(read_failed)
       REPORTED DATA(read_reported).
@@ -102,6 +96,9 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
     MOVE-CORRESPONDING read_reported TO reported
       EXPANDING NESTED TABLES KEEPING TARGET LINES.
 
+    "Authorization is ownership only. Status rules (released orders are frozen)
+    "belong to get_instance_features, so later receipt/invoice steps can still
+    "be authorized on a released order.
     DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
     LOOP AT orders INTO DATA(order).
       "For a new draft the active-record creation user may not yet be populated.
@@ -109,9 +106,7 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
       DATA(own_order) = xsdbool(
         order-CreatedBy = owner OR
         ( order-CreatedBy IS INITIAL AND order-%is_draft = if_abap_behv=>mk-on ) ).
-      DATA(editable) = xsdbool( own_order = abap_true AND
-        order-Status = lcl_p2p_rules=>pending ).
-      DATA(permission) = COND #( WHEN editable = abap_true
+      DATA(permission) = COND #( WHEN own_order = abap_true
         THEN if_abap_behv=>auth-allowed ELSE if_abap_behv=>auth-unauthorized ).
 
       APPEND VALUE #( %tky = order-%tky
@@ -189,22 +184,41 @@ CLASS lhc_purchaseorder IMPLEMENTATION.
       EXPANDING NESTED TABLES KEEPING TARGET LINES.
     CHECK orders IS NOT INITIAL.
 
-    DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
+    "The CDS access roles restrict both selects to the current user's own rows.
     DATA suppliers TYPE SORTED TABLE OF zp2p_supp_mf001-supplier_id
       WITH UNIQUE KEY table_line.
-    SELECT FROM zp2p_supp_mf001
-      FIELDS supplier_id
+    SELECT FROM zi_p2p_supp_mf001
+      FIELDS SupplierID
       FOR ALL ENTRIES IN @orders
-      WHERE owner_id = @owner AND supplier_id = @orders-SupplierID
+      WHERE SupplierID = @orders-SupplierID
       INTO TABLE @suppliers.
 
+    "Order references must be unique among the user's active orders. Editing an
+    "existing order keeps its UUID, so the order never clashes with itself.
+    SELECT FROM zi_p2p_po_mf001
+      FIELDS PurchaseOrderUUID, PurchaseOrderNumber
+      FOR ALL ENTRIES IN @orders
+      WHERE PurchaseOrderNumber = @orders-PurchaseOrderNumber
+        AND PurchaseOrderUUID <> @orders-PurchaseOrderUUID
+      INTO TABLE @DATA(clashes).
+
+    DATA number_taken TYPE abap_bool.
     LOOP AT orders INTO DATA(order).
       APPEND VALUE #( %tky = order-%tky %state_area = 'HEADER' ) TO reported-PurchaseOrder.
+      "A batch can return this order's own active row for another order's lookup.
+      number_taken = abap_false.
+      LOOP AT clashes TRANSPORTING NO FIELDS
+           WHERE PurchaseOrderNumber = order-PurchaseOrderNumber
+             AND PurchaseOrderUUID <> order-PurchaseOrderUUID.
+        number_taken = abap_true.
+        EXIT.
+      ENDLOOP.
       DATA(issues) = lcl_p2p_rules=>check_header(
         header = VALUE #( po_number = order-PurchaseOrderNumber supplier_id = order-SupplierID
                           order_date = order-OrderDate currency_code = order-CurrencyCode
                           status = order-Status )
-        supplier_exists = xsdbool( line_exists( suppliers[ table_line = order-SupplierID ] ) ) ).
+        supplier_exists = xsdbool( line_exists( suppliers[ table_line = order-SupplierID ] ) )
+        number_taken = number_taken ).
       IF issues IS NOT INITIAL.
         APPEND VALUE #( %tky = order-%tky ) TO failed-PurchaseOrder.
       ENDIF.
@@ -308,14 +322,13 @@ CLASS lhc_purchaseorderitem IMPLEMENTATION.
       EXPANDING NESTED TABLES KEEPING TARGET LINES.
     CHECK items IS NOT INITIAL.
 
-    DATA(owner) = cl_abap_context_info=>get_user_technical_name( ).
+    "The CDS view admits only EA products; its access role admits only own rows.
     DATA products TYPE SORTED TABLE OF zp2p_prod_mf001-product_id
       WITH UNIQUE KEY table_line.
-    SELECT FROM zp2p_prod_mf001
-      FIELDS product_id
+    SELECT FROM zi_p2p_prod_mf001
+      FIELDS ProductID
       FOR ALL ENTRIES IN @items
-      WHERE owner_id = @owner AND product_id = @items-ProductID
-        AND unit_code = @lcl_p2p_rules=>unit
+      WHERE ProductID = @items-ProductID
       INTO TABLE @products.
 
     "Read siblings from the transactional buffer, including unsaved changes.

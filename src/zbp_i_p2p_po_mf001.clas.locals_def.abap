@@ -21,6 +21,7 @@ CLASS lcl_p2p_rules DEFINITION FINAL.
 
     CLASS-METHODS check_header
       IMPORTING header TYPE zp2p_po_mf001 supplier_exists TYPE abap_bool
+                number_taken TYPE abap_bool DEFAULT abap_false
       RETURNING VALUE(issues) TYPE tt_issues.
     CLASS-METHODS check_item
       IMPORTING item TYPE zp2p_poit_mf001 product_exists TYPE abap_bool
